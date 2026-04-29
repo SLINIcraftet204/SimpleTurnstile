@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/shopware/platform/trunk/src/Core/System/SystemConfig/Schema/config.xsd">
+
+    <card>
+        <title>Cloudflare Turnstile</title>
+        <title lang="de-DE">Cloudflare Turnstile</title>
+
+        <input-field type="text">
+            <name>siteKey</name>
+            <label>Site Key</label>
+            <label lang="de-DE">Site Key</label>
+            <placeholder>0x4AAAA...</placeholder>
+            <helpText>Public Cloudflare Turnstile site key.</helpText>
+            <helpText lang="de-DE">Öffentlicher Cloudflare-Turnstile-Site-Key.</helpText>
+        </input-field>
+
+        <input-field type="password">
+            <name>secretKey</name>
+            <label>Secret Key</label>
+            <label lang="de-DE">Secret Key</label>
+            <placeholder>0x4AAAA...</placeholder>
+            <helpText>Private Cloudflare Turnstile secret key used for server-side validation.</helpText>
+            <helpText lang="de-DE">Privater Cloudflare-Turnstile-Secret-Key für die serverseitige Validierung.</helpText>
+        </input-field>
+
+        <input-field type="single-select">
+            <name>theme</name>
+            <label>Theme</label>
+            <label lang="de-DE">Darstellung</label>
+            <defaultValue>auto</defaultValue>
+            <options>
+                <option>
+                    <id>auto</id>
+                    <name>Auto</name>
+                    <name lang="de-DE">Automatisch</name>
+                </option>
+                <option>
+                    <id>light</id>
+                    <name>Light</name>
+                    <name lang="de-DE">Hell</name>
+                </option>
+                <option>
+                    <id>dark</id>
+                    <name>Dark</name>
+                    <name lang="de-DE">Dunkel</name>
+                </option>
+            </options>
+        </input-field>
+
+        <input-field type="single-select">
+            <name>size</name>
+            <label>Size</label>
+            <label lang="de-DE">Größe</label>
+            <defaultValue>normal</defaultValue>
+            <options>
+                <option>
+                    <id>normal</id>
+                    <name>Normal</name>
+                    <name lang="de-DE">Normal</name>
+                </option>
+                <option>
+                    <id>compact</id>
+                    <name>Compact</name>
+                    <name lang="de-DE">Kompakt</name>
+                </option>
+                <option>
+                    <id>flexible</id>
+                    <name>Flexible</name>
+                    <name lang="de-DE">Flexibel</name>
+                </option>
+            </options>
+        </input-field>
+
+        <input-field type="single-select">
+            <name>language</name>
+            <label>Language</label>
+            <label lang="de-DE">Sprache</label>
+            <defaultValue>auto</defaultValue>
+            <options>
+                <option>
+                    <id>auto</id>
+                    <name>Auto</name>
+                    <name lang="de-DE">Automatisch</name>
+                </option>
+                <option>
+                    <id>de</id>
+                    <name>German</name>
+                    <name lang="de-DE">Deutsch</name>
+                </option>
+                <option>
+                    <id>en</id>
+                    <name>English</name>
+                    <name lang="de-DE">Englisch</name>
+                </option>
+            </options>
+        </input-field>
+
+        <input-field type="bool">
+            <name>sendRemoteIp</name>
+            <label>Send visitor IP to Cloudflare</label>
+            <label lang="de-DE">Besucher-IP an Cloudflare mitsenden</label>
+            <defaultValue>false</defaultValue>
+            <helpText>The remote IP parameter is optional. Keep disabled if your shop runs behind proxies and the real client IP is not configured correctly.</helpText>
+            <helpText lang="de-DE">Der Remote-IP-Parameter ist optional. Deaktiviert lassen, wenn der Shop hinter Proxys läuft und die echte Client-IP nicht sauber konfiguriert ist.</helpText>
+        </input-field>
+
+        <input-field type="bool">
+            <name>debugLogging</name>
+            <label>Enable debug logging</label>
+            <label lang="de-DE">Debug-Logging aktivieren</label>
+            <defaultValue>false</defaultValue>
+            <helpText>Writes additional validation information to the Shopware log.</helpText>
+            <helpText lang="de-DE">Schreibt zusätzliche Validierungsinformationen in das Shopware-Log.</helpText>
+        </input-field>
+    </card>
+</config>

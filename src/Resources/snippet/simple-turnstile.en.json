@@ -1,0 +1,10 @@
+{
+  "simple-turnstile": {
+    "captcha": {
+      "label": "Cloudflare Turnstile",
+      "error": "Captcha validation failed. Please try again.",
+      "missingToken": "The captcha response is missing. Please confirm that you are human.",
+      "configurationMissing": "Cloudflare Turnstile is not fully configured."
+    }
+  }
+}
