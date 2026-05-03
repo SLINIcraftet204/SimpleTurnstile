@@ -6,5 +6,8 @@
       "missingToken": "Die Captcha-Antwort fehlt. Bitte bestätige, dass du ein Mensch bist.",
       "configurationMissing": "Cloudflare Turnstile ist nicht vollständig konfiguriert."
     }
+  },
+  "error": {
+    "SIMPLE_TURNSTILE_INVALID": "Die Captcha-Prüfung ist fehlgeschlagen. Bitte versuche es erneut."
   }
 }

@@ -6,5 +6,8 @@
       "missingToken": "The captcha response is missing. Please confirm that you are human.",
       "configurationMissing": "Cloudflare Turnstile is not fully configured."
     }
+  },
+  "error": {
+    "SIMPLE_TURNSTILE_INVALID": "Captcha validation failed. Please try again."
   }
 }

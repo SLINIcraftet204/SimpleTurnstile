@@ -2,11 +2,20 @@ import Plugin from 'src/plugin-system/plugin.class';
 
 const SCRIPT_ID = 'simple-turnstile-api-script';
 const LOADING_PROMISE_KEY = '__simpleTurnstileLoadingPromise';
+const FORM_SUBMIT_RESET_DELAY = 2500;
 
 export default class SimpleTurnstilePlugin extends Plugin {
     init() {
         this.widgetId = null;
+        this.resetTimeout = null;
         this.widgetElement = this.el.querySelector('[data-simple-turnstile-widget="true"]');
+        this.form = this.el.closest('form');
+
+        this._boundHandleSubmit = this._handleSubmit.bind(this);
+
+        if (this.form) {
+            this.form.addEventListener('submit', this._boundHandleSubmit);
+        }
 
         if (!this.widgetElement) {
             return;
@@ -15,12 +24,37 @@ export default class SimpleTurnstilePlugin extends Plugin {
         this._loadTurnstile()
             .then(() => this._renderWidget())
             .catch(() => {
-                // Silent by design. Server-side validation will still reject missing tokens.
+                // Server-side validation will still reject missing tokens.
             });
+    }
+
+    destroy() {
+        if (this.form) {
+            this.form.removeEventListener('submit', this._boundHandleSubmit);
+        }
+
+        if (this.resetTimeout) {
+            window.clearTimeout(this.resetTimeout);
+            this.resetTimeout = null;
+        }
+
+        if (window.turnstile && this.widgetId !== null && typeof window.turnstile.remove === 'function') {
+            window.turnstile.remove(this.widgetId);
+        }
+
+        this.widgetId = null;
+
+        if (this.widgetElement) {
+            delete this.widgetElement.dataset.simpleTurnstileRendered;
+        }
     }
 
     _renderWidget() {
         if (!window.turnstile || this.widgetId !== null || !this.el.isConnected) {
+            return;
+        }
+
+        if (this.widgetElement.dataset.simpleTurnstileRendered === 'true') {
             return;
         }
 
@@ -30,16 +64,60 @@ export default class SimpleTurnstilePlugin extends Plugin {
             return;
         }
 
-        this.widgetId = window.turnstile.render(this.widgetElement, {
+        const widgetId = window.turnstile.render(this.widgetElement, {
             sitekey: siteKey,
             theme: this.el.dataset.theme || 'auto',
             size: this.el.dataset.size || 'normal',
             language: this.el.dataset.language || 'auto',
             'response-field': true,
-            'response-field-name': 'cf-turnstile-response',
-            'expired-callback': () => this.reset(),
-            'error-callback': () => this.reset(),
+            'response-field-name': this.el.dataset.responseFieldName || 'cf-turnstile-response',
+            'refresh-expired': 'auto',
+            callback: () => {
+                this.el.dataset.simpleTurnstileSolved = 'true';
+            },
+            'expired-callback': () => {
+                this.el.dataset.simpleTurnstileSolved = 'false';
+            },
+            'timeout-callback': () => {
+                this.el.dataset.simpleTurnstileSolved = 'false';
+            },
+            'error-callback': () => {
+                this.el.dataset.simpleTurnstileSolved = 'false';
+                this._scheduleReset(1000);
+            },
         });
+
+        if (typeof widgetId === 'undefined' || widgetId === null) {
+            return;
+        }
+
+        this.widgetId = widgetId;
+        this.widgetElement.dataset.simpleTurnstileRendered = 'true';
+    }
+
+    _handleSubmit() {
+        /*
+         * Turnstile tokens are single-use.
+         * If Shopware keeps the user on the same page after an AJAX validation error,
+         * the old token must not be reused.
+         */
+        this._scheduleReset(FORM_SUBMIT_RESET_DELAY);
+    }
+
+    _scheduleReset(delay) {
+        if (this.resetTimeout) {
+            window.clearTimeout(this.resetTimeout);
+        }
+
+        this.resetTimeout = window.setTimeout(() => {
+            this.resetTimeout = null;
+
+            if (!this.el.isConnected) {
+                return;
+            }
+
+            this.reset();
+        }, delay);
     }
 
     reset() {
@@ -48,6 +126,7 @@ export default class SimpleTurnstilePlugin extends Plugin {
         }
 
         window.turnstile.reset(this.widgetId);
+        this.el.dataset.simpleTurnstileSolved = 'false';
     }
 
     _loadTurnstile() {

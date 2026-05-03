@@ -25,52 +25,55 @@ class SimpleTurnstile extends Plugin
     {
         parent::postInstall($installContext);
 
-        $this->getCaptchaConfigurationInstaller()->install();
-    }
-
-    public function update(UpdateContext $updateContext): void
-    {
-        parent::update($updateContext);
-
-        $this->getCaptchaConfigurationInstaller()->install();
-    }
-
-    public function postUpdate(UpdateContext $updateContext): void
-    {
-        parent::postUpdate($updateContext);
-
-        $this->getCaptchaConfigurationInstaller()->install();
+        $this->getCaptchaConfigurationInstaller()->postInstall();
     }
 
     public function activate(ActivateContext $activateContext): void
     {
         parent::activate($activateContext);
 
-        $this->getCaptchaConfigurationInstaller()->install();
+        $this->getCaptchaConfigurationInstaller()->activate();
     }
 
     public function deactivate(DeactivateContext $deactivateContext): void
     {
+        $installer = $this->getCaptchaConfigurationInstaller();
+
+        $installer->beforeDeactivate();
+
         parent::deactivate($deactivateContext);
 
-        /*
-         * Beim Deaktivieren NICHT entfernen.
-         * Nur sicherstellen, dass der Captcha-Typ nicht aktiv verwendet wird.
-         */
-        $this->getCaptchaConfigurationInstaller()->markCaptchaInactiveOnly();
+        $installer->afterDeactivate();
     }
 
     public function uninstall(UninstallContext $uninstallContext): void
     {
+        $removeUserData = !$uninstallContext->keepUserData();
+        $installer = $this->getCaptchaConfigurationInstaller();
+
+        $installer->beforeUninstall($removeUserData);
+
         parent::uninstall($uninstallContext);
 
-        /*
-         * Beim Deinstallieren wirklich aus activeCaptchasV2 entfernen.
-         * Plugin-Konfigurationswerte werden nur bei "alle Daten löschen" entfernt.
-         */
-        $this->getCaptchaConfigurationInstaller()->uninstall(
-            removeUserData: !$uninstallContext->keepUserData()
-        );
+        $installer->afterUninstall($removeUserData);
+    }
+
+    public function update(UpdateContext $updateContext): void
+    {
+        $installer = $this->getCaptchaConfigurationInstaller();
+
+        $installer->beforeUpdate();
+
+        parent::update($updateContext);
+
+        $installer->afterUpdate();
+    }
+
+    public function postUpdate(UpdateContext $updateContext): void
+    {
+        parent::postUpdate($updateContext);
+
+        $this->getCaptchaConfigurationInstaller()->postUpdate();
     }
 
     private function getCaptchaConfigurationInstaller(): CaptchaConfigurationInstaller

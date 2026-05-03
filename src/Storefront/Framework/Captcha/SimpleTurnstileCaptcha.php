@@ -34,16 +34,29 @@ class SimpleTurnstileCaptcha extends AbstractCaptcha
     {
         $token = $request->request->get(self::CAPTCHA_REQUEST_PARAMETER);
 
-        if (!\is_string($token) || trim($token) === '') {
-            $this->debug($request, 'Turnstile validation failed: missing token.');
+        if (!\is_string($token)) {
+            $fallbackToken = $request->get(self::CAPTCHA_REQUEST_PARAMETER);
+            $token = \is_string($fallbackToken) ? $fallbackToken : '';
+        }
+
+        $token = trim($token);
+
+        if ($token === '') {
+            $this->debug($request, 'Validation failed: missing Turnstile token.');
 
             return false;
         }
 
-        $secretKey = $this->getConfigValue($request, 'secretKey');
+        if (\strlen($token) > 2048) {
+            $this->debug($request, 'Validation failed: Turnstile token is too long.');
 
-        if (!\is_string($secretKey) || trim($secretKey) === '') {
-            $this->debug($request, 'Turnstile validation failed: missing secret key.');
+            return false;
+        }
+
+        $secretKey = $this->getStringConfigValue($request, 'secretKey');
+
+        if ($secretKey === null || $secretKey === '') {
+            $this->debug($request, 'Validation failed: missing secret key.');
 
             return false;
         }
@@ -66,6 +79,7 @@ class SimpleTurnstileCaptcha extends AbstractCaptcha
                 'form_params' => $formParams,
                 'timeout' => 8.0,
                 'connect_timeout' => 4.0,
+                'http_errors' => false,
             ]);
 
             $rawResponse = $response->getBody()->getContents();
@@ -73,30 +87,35 @@ class SimpleTurnstileCaptcha extends AbstractCaptcha
             try {
                 $decodedResponse = json_decode($rawResponse, true, flags: \JSON_THROW_ON_ERROR);
             } catch (\JsonException $exception) {
-                $this->debug($request, 'Turnstile validation failed: invalid JSON response.', [
+                $this->debug($request, 'Validation failed: invalid JSON response from Cloudflare.', [
                     'exception' => $exception->getMessage(),
+                    'statusCode' => $response->getStatusCode(),
                 ]);
 
                 return false;
             }
 
             if (!\is_array($decodedResponse)) {
-                $this->debug($request, 'Turnstile validation failed: response is not an array.');
+                $this->debug($request, 'Validation failed: response from Cloudflare is not an array.', [
+                    'statusCode' => $response->getStatusCode(),
+                ]);
 
                 return false;
             }
 
             $success = ($decodedResponse['success'] ?? false) === true;
 
-            $this->debug($request, 'Turnstile validation response received.', [
+            $this->debug($request, 'Validation response received from Cloudflare.', [
                 'success' => $success,
+                'statusCode' => $response->getStatusCode(),
                 'hostname' => $decodedResponse['hostname'] ?? null,
+                'action' => $decodedResponse['action'] ?? null,
                 'errorCodes' => $decodedResponse['error-codes'] ?? [],
             ]);
 
             return $success;
         } catch (\Throwable $exception) {
-            $this->debug($request, 'Turnstile validation failed: request exception.', [
+            $this->debug($request, 'Validation failed: request to Cloudflare failed.', [
                 'exception' => $exception->getMessage(),
             ]);
 
@@ -116,34 +135,53 @@ class SimpleTurnstileCaptcha extends AbstractCaptcha
 
     public function getViolations(): ConstraintViolationList
     {
-    $message = $this->translator->trans('simple-turnstile.captcha.error');
+        $message = $this->translator->trans('simple-turnstile.captcha.error');
 
-    $violations = new ConstraintViolationList();
-    $violations->add(new ConstraintViolation(
-        $message,
-        $message,
-        [],
-        '',
-        '/' . self::CAPTCHA_REQUEST_PARAMETER,
-        '',
-        null,
-        self::INVALID_CAPTCHA_CODE
-    ));
+        $violations = new ConstraintViolationList();
+        $violations->add(new ConstraintViolation(
+            $message,
+            $message,
+            [],
+            '',
+            '/' . self::CAPTCHA_REQUEST_PARAMETER,
+            '',
+            null,
+            self::INVALID_CAPTCHA_CODE
+        ));
 
-    return $violations;
+        return $violations;
     }
 
-    private function getConfigValue(Request $request, string $key): mixed
+    private function getStringConfigValue(Request $request, string $key): ?string
     {
-        return $this->systemConfigService->get(
-            self::CONFIG_PREFIX . $key,
-            $this->getSalesChannelId($request)
-        );
+        $value = $this->getConfigValue($request, $key);
+
+        if (!\is_string($value)) {
+            return null;
+        }
+
+        return trim($value);
     }
 
     private function getBoolConfigValue(Request $request, string $key): bool
     {
         return (bool) $this->getConfigValue($request, $key);
+    }
+
+    private function getConfigValue(Request $request, string $key): mixed
+    {
+        $salesChannelId = $this->getSalesChannelId($request);
+
+        $value = $this->systemConfigService->get(
+            self::CONFIG_PREFIX . $key,
+            $salesChannelId
+        );
+
+        if (($value === null || $value === '') && $salesChannelId !== null) {
+            return $this->systemConfigService->get(self::CONFIG_PREFIX . $key);
+        }
+
+        return $value;
     }
 
     private function getSalesChannelId(Request $request): ?string
