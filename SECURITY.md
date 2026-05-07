@@ -12,5 +12,4 @@ currently being supported with security updates.
 | Shopware 6.7.9.1  |     0.1.0      | :white_check_mark: |
 | Shopware 6.7.9.0  |     0.1.0      | :white_check_mark: |
 | Shopware 6.7.8.2  |     0.1.0      | :white_check_mark: |
-| Shopware 6.7.9.1  |     0.1.0      | :white_check_mark: |
 | Shopware 6.7.x    |     0.1.0      | :white_check_mark: |
