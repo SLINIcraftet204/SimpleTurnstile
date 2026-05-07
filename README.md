@@ -6,6 +6,8 @@ Simple Turnstile adds Cloudflare Turnstile as a captcha integration for Shopware
 
 Initial target:
 
+- Shopware 6.7.9.1
+- Shopware 6.7.9.0
 - Shopware 6.7.8.2
 - Shopware 6.7.9.1
 - Shopware 6.7.x
