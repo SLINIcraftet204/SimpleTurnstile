@@ -50,7 +50,7 @@ export default class SimpleTurnstilePlugin extends Plugin {
     }
 
     _renderWidget() {
-        if (!window.turnstile || this.widgetId !== null || !this.el.isConnected) {
+        if (!window.turnstile || this.widgetId !== null || !this.el.isConnected || !this.widgetElement) {
             return;
         }
 
@@ -58,19 +58,29 @@ export default class SimpleTurnstilePlugin extends Plugin {
             return;
         }
 
-        const siteKey = this.el.dataset.sitekey;
+        // The Twig template also supports Cloudflare's implicit renderer.
+        // If api.js has already rendered the widget, do not render it twice.
+        if (this.widgetElement.querySelector('iframe') || this.widgetElement.querySelector('input[name="cf-turnstile-response"]')) {
+            this.widgetElement.dataset.simpleTurnstileRendered = 'true';
+            this.el.dataset.simpleTurnstileSolved = 'false';
+            return;
+        }
+
+        const siteKey = this.el.dataset.sitekey || this.widgetElement.dataset.sitekey;
 
         if (!siteKey) {
             return;
         }
 
+        const responseFieldName = this.el.dataset.responseFieldName || this.widgetElement.dataset.responseFieldName || 'cf-turnstile-response';
+
         const widgetId = window.turnstile.render(this.widgetElement, {
             sitekey: siteKey,
-            theme: this.el.dataset.theme || 'auto',
-            size: this.el.dataset.size || 'normal',
-            language: this.el.dataset.language || 'auto',
+            theme: this.el.dataset.theme || this.widgetElement.dataset.theme || 'auto',
+            size: this.el.dataset.size || this.widgetElement.dataset.size || 'normal',
+            language: this.el.dataset.language || this.widgetElement.dataset.language || 'auto',
             'response-field': true,
-            'response-field-name': this.el.dataset.responseFieldName || 'cf-turnstile-response',
+            'response-field-name': responseFieldName,
             'refresh-expired': 'auto',
             callback: () => {
                 this.el.dataset.simpleTurnstileSolved = 'true';
@@ -96,11 +106,7 @@ export default class SimpleTurnstilePlugin extends Plugin {
     }
 
     _handleSubmit() {
-        /*
-         * Turnstile tokens are single-use.
-         * If Shopware keeps the user on the same page after an AJAX validation error,
-         * the old token must not be reused.
-         */
+        // Turnstile tokens are single-use. Reset after Shopware/AJAX validation errors.
         this._scheduleReset(FORM_SUBMIT_RESET_DELAY);
     }
 
@@ -121,12 +127,21 @@ export default class SimpleTurnstilePlugin extends Plugin {
     }
 
     reset() {
-        if (!window.turnstile || this.widgetId === null) {
+        if (!window.turnstile || !this.widgetElement) {
             return;
         }
 
-        window.turnstile.reset(this.widgetId);
-        this.el.dataset.simpleTurnstileSolved = 'false';
+        if (this.widgetId !== null) {
+            window.turnstile.reset(this.widgetId);
+            this.el.dataset.simpleTurnstileSolved = 'false';
+            return;
+        }
+
+        // Implicit rendering does not always give us a widget id.
+        if (typeof window.turnstile.reset === 'function') {
+            window.turnstile.reset(this.widgetElement);
+            this.el.dataset.simpleTurnstileSolved = 'false';
+        }
     }
 
     _loadTurnstile() {

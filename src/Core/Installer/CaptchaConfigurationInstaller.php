@@ -13,7 +13,7 @@ class CaptchaConfigurationInstaller
 
     private const STATE_TABLE = 'simple_turnstile_lifecycle_state';
     private const STATE_KEY = 'lifecycle';
-    private const STATE_VERSION = 1;
+    private const STATE_VERSION = 2;
 
     private const GLOBAL_SCOPE_KEY = 'global';
 
@@ -27,6 +27,16 @@ class CaptchaConfigurationInstaller
         'debugLogging',
     ];
 
+    private const CONFIG_DEFAULTS = [
+        'siteKey' => '',
+        'secretKey' => '',
+        'theme' => 'auto',
+        'size' => 'normal',
+        'language' => 'auto',
+        'sendRemoteIp' => false,
+        'debugLogging' => false,
+    ];
+
     public function __construct(
         private readonly SystemConfigService $systemConfigService,
         private readonly Connection $connection
@@ -35,62 +45,71 @@ class CaptchaConfigurationInstaller
 
     public function install(): void
     {
-        $this->recordLifecycleAction('install');
+        $this->recordLifecycleAction('install.start');
         $this->restoreUserConfigSnapshot();
-
-        // Installed does not mean active. Register selectable, but do not enable yet.
         $this->ensureCaptchaRegistered(false);
+        $this->synchronizeCurrentState('install.end', false);
+        $this->registerRestoreFinalizer(false, 'install.shutdown');
     }
 
     public function postInstall(): void
     {
-        $this->recordLifecycleAction('postInstall');
+        $this->recordLifecycleAction('postInstall.start');
         $this->restoreUserConfigSnapshot();
         $this->ensureCaptchaRegistered(false);
+        $this->synchronizeCurrentState('postInstall.end', false);
+        $this->registerRestoreFinalizer(false, 'postInstall.shutdown');
     }
 
     public function activate(): void
     {
-        $this->recordLifecycleAction('activate');
+        $this->recordLifecycleAction('activate.start');
         $this->restoreUserConfigSnapshot();
-
-        // Restore active state only when the plugin is actually active.
         $this->ensureCaptchaRegistered(true);
+        $this->synchronizeCurrentState('activate.end', true);
+        $this->registerRestoreFinalizer(true, 'activate.shutdown');
     }
 
     public function beforeDeactivate(): void
     {
-        $this->recordLifecycleAction('beforeDeactivate');
-        $this->snapshotUserConfig();
-        $this->snapshotCaptchaState();
+        $this->recordLifecycleAction('beforeDeactivate.start');
+        $this->snapshotUserConfig('beforeDeactivate.configSnapshot', true);
+        $this->snapshotCaptchaState('beforeDeactivate.captchaSnapshot', true);
         $this->removeCaptchaFromAllActiveCaptchaConfigs();
+        $this->recordLifecycleAction('beforeDeactivate.end');
+        $this->registerRestoreConfigAndRemoveCaptchaFinalizer('deactivate.shutdown');
     }
 
     public function afterDeactivate(): void
     {
-        $this->recordLifecycleAction('afterDeactivate');
-
-        // Keep user settings intact even if Shopware touched system_config during deactivate.
+        $this->recordLifecycleAction('afterDeactivate.start');
         $this->restoreUserConfigSnapshot();
         $this->removeCaptchaFromAllActiveCaptchaConfigs();
+        $this->recordLifecycleAction('afterDeactivate.end');
+        $this->registerRestoreConfigAndRemoveCaptchaFinalizer('afterDeactivate.shutdown');
     }
 
     public function beforeUninstall(bool $removeUserData): void
     {
-        $this->recordLifecycleAction($removeUserData ? 'beforeUninstallRemoveUserData' : 'beforeUninstallKeepUserData');
+        $this->recordLifecycleAction($removeUserData ? 'beforeUninstallRemoveUserData.start' : 'beforeUninstallKeepUserData.start');
 
         if (!$removeUserData) {
-            $this->snapshotUserConfig();
-            $this->snapshotCaptchaState();
+            $this->snapshotUserConfig('beforeUninstall.keepUserData.configSnapshot', true);
+            $this->snapshotCaptchaState('beforeUninstall.keepUserData.captchaSnapshot', true);
         }
 
         $this->removeCaptchaFromAllActiveCaptchaConfigs();
+        $this->recordLifecycleAction($removeUserData ? 'beforeUninstallRemoveUserData.end' : 'beforeUninstallKeepUserData.end');
+
+        if (!$removeUserData) {
+            $this->registerRestoreConfigAndRemoveCaptchaFinalizer('uninstallKeepUserData.shutdown');
+        }
     }
 
     public function afterUninstall(bool $removeUserData): void
     {
         if ($removeUserData) {
-            $this->recordLifecycleAction('afterUninstallRemoveUserData');
+            $this->recordLifecycleAction('afterUninstallRemoveUserData.start');
             $this->removeCaptchaFromAllActiveCaptchaConfigs();
             $this->removePluginConfiguration();
             $this->dropLifecycleStateTable();
@@ -98,32 +117,53 @@ class CaptchaConfigurationInstaller
             return;
         }
 
-        $this->recordLifecycleAction('afterUninstallKeepUserData');
-
-        // Normal uninstall with "keep user data" must keep the user's plugin config.
+        $this->recordLifecycleAction('afterUninstallKeepUserData.start');
         $this->restoreUserConfigSnapshot();
         $this->removeCaptchaFromAllActiveCaptchaConfigs();
+        $this->synchronizeCurrentState('afterUninstallKeepUserData.end', false);
+        $this->registerRestoreConfigAndRemoveCaptchaFinalizer('afterUninstallKeepUserData.shutdown');
     }
 
     public function beforeUpdate(): void
     {
-        $this->recordLifecycleAction('beforeUpdate');
-        $this->snapshotUserConfig();
-        $this->snapshotCaptchaState();
+        $this->recordLifecycleAction('beforeUpdate.start');
+        $this->snapshotUserConfig('beforeUpdate.configSnapshot', true);
+        $this->snapshotCaptchaState('beforeUpdate.captchaSnapshot', true);
+        $this->recordLifecycleAction('beforeUpdate.end');
     }
 
     public function afterUpdate(): void
     {
-        $this->recordLifecycleAction('afterUpdate');
+        $this->recordLifecycleAction('afterUpdate.start');
         $this->restoreUserConfigSnapshot();
         $this->ensureCaptchaRegistered(true);
+        $this->synchronizeCurrentState('afterUpdate.end', true);
+        $this->registerRestoreFinalizer(true, 'afterUpdate.shutdown');
     }
 
     public function postUpdate(): void
     {
-        $this->recordLifecycleAction('postUpdate');
+        $this->recordLifecycleAction('postUpdate.start');
         $this->restoreUserConfigSnapshot();
         $this->ensureCaptchaRegistered(true);
+        $this->synchronizeCurrentState('postUpdate.end', true);
+        $this->registerRestoreFinalizer(true, 'postUpdate.shutdown');
+    }
+
+    /**
+     * Used by the storefront/admin request subscriber. This keeps the backup table fresh after the merchant saves plugin config,
+     * not only when a plugin lifecycle action is executed.
+     */
+    public function synchronizeCurrentState(string $source, bool $captureCaptchaState = true): void
+    {
+        $this->recordLifecycleAction($source . '.sync.start');
+        $this->snapshotUserConfig($source . '.configSnapshot', false);
+
+        if ($captureCaptchaState) {
+            $this->snapshotCaptchaState($source . '.captchaSnapshot', false);
+        }
+
+        $this->recordLifecycleAction($source . '.sync.end');
     }
 
     private function recordLifecycleAction(string $lifecycleAction): void
@@ -139,26 +179,47 @@ class CaptchaConfigurationInstaller
         $state['captchaStateByScope'] = \is_array($state['captchaStateByScope'] ?? null) ? $state['captchaStateByScope'] : [];
         $state['captchaWasActive'] = (bool) ($state['captchaWasActive'] ?? false);
 
+        $this->appendStateLog($state, $lifecycleAction, $now);
         $this->writeLifecycleState($state);
     }
 
-    private function snapshotUserConfig(): void
+    private function appendStateLog(array &$state, string $action, string $at): void
+    {
+        $log = \is_array($state['lifecycleLog'] ?? null) ? $state['lifecycleLog'] : [];
+        $log[] = [
+            'action' => $action,
+            'at' => $at,
+        ];
+
+        if (\count($log) > 30) {
+            $log = \array_slice($log, -30);
+        }
+
+        $state['lifecycleLog'] = $log;
+    }
+
+    private function snapshotUserConfig(string $source, bool $force): void
     {
         $state = $this->readLifecycleState();
         $existingRows = \is_array($state['pluginConfigRows'] ?? null) ? $state['pluginConfigRows'] : [];
         $currentRows = $this->readCurrentPluginConfigRows();
+        $now = $this->now();
 
         if ($currentRows === []) {
-            // Never replace a valid old backup with an empty read.
-            $state['lastPluginConfigSnapshotSkippedAt'] = $this->now();
+            $state['lastPluginConfigSnapshotSkippedAt'] = $now;
             $state['lastPluginConfigSnapshotSkippedReason'] = 'no-current-system-config-rows';
+            $state['lastPluginConfigSnapshotSource'] = $source;
             $this->writeLifecycleState($state);
 
             return;
         }
 
-        $state['pluginConfigRows'] = $this->mergePluginConfigRows($existingRows, $currentRows);
-        $state['pluginConfigSnapshotCreatedAt'] = $this->now();
+        $mergedRows = $this->mergePluginConfigRows($existingRows, $currentRows, $force);
+
+        $state['pluginConfigRows'] = $mergedRows;
+        $state['pluginConfigRowsHash'] = $this->hashRows($mergedRows);
+        $state['pluginConfigSnapshotCreatedAt'] = $now;
+        $state['lastPluginConfigSnapshotSource'] = $source;
         unset($state['lastPluginConfigSnapshotSkippedReason']);
 
         $this->writeLifecycleState($state);
@@ -193,6 +254,10 @@ class CaptchaConfigurationInstaller
             $decodedValue = $this->decodeSystemConfigValue($configurationValue);
             $this->writeSystemConfigValue($configurationKey, $decodedValue, $salesChannelIdHex);
         }
+
+        $state['lastPluginConfigRestoreAt'] = $this->now();
+        $state['lastPluginConfigRestoreRows'] = \count($rows);
+        $this->writeLifecycleState($state);
     }
 
     private function readCurrentPluginConfigRows(): array
@@ -234,7 +299,7 @@ class CaptchaConfigurationInstaller
         return $result;
     }
 
-    private function mergePluginConfigRows(array $existingRows, array $currentRows): array
+    private function mergePluginConfigRows(array $existingRows, array $currentRows, bool $force): array
     {
         $merged = [];
 
@@ -244,14 +309,9 @@ class CaptchaConfigurationInstaller
             }
 
             $mapKey = $this->buildConfigRowMapKey($row['configurationKey'] ?? null, $row['salesChannelIdHex'] ?? null);
-
-            if ($mapKey === null) {
-                continue;
-            }
-
             $configurationValue = $row['configurationValue'] ?? null;
 
-            if (!\is_string($configurationValue) || trim($configurationValue) === '') {
+            if ($mapKey === null || !\is_string($configurationValue) || trim($configurationValue) === '') {
                 continue;
             }
 
@@ -268,40 +328,71 @@ class CaptchaConfigurationInstaller
             }
 
             $mapKey = $this->buildConfigRowMapKey($row['configurationKey'] ?? null, $row['salesChannelIdHex'] ?? null);
-
-            if ($mapKey === null) {
-                continue;
-            }
-
             $configurationValue = $row['configurationValue'] ?? null;
 
-            if (!\is_string($configurationValue) || trim($configurationValue) === '') {
+            if ($mapKey === null || !\is_string($configurationValue) || trim($configurationValue) === '') {
                 continue;
             }
 
-            // This method is called before parent deactivate/uninstall, so current rows are the user's latest values.
-            $merged[$mapKey] = [
+            $candidate = [
                 'configurationKey' => $row['configurationKey'],
                 'configurationValue' => $configurationValue,
                 'salesChannelIdHex' => $this->normalizeSalesChannelIdHex($row['salesChannelIdHex'] ?? null),
             ];
+
+            $existing = $merged[$mapKey] ?? null;
+
+            if (!$force && \is_array($existing) && $this->looksLikeDefaultRegression($existing, $candidate)) {
+                continue;
+            }
+
+            $merged[$mapKey] = $candidate;
         }
 
-        return array_values($merged);
+        return \array_values($merged);
     }
 
-    private function snapshotCaptchaState(): void
+    private function looksLikeDefaultRegression(array $existingRow, array $candidateRow): bool
+    {
+        $configurationKey = $candidateRow['configurationKey'] ?? null;
+
+        if (!$this->isManagedPluginConfigKey($configurationKey)) {
+            return false;
+        }
+
+        $shortKey = \substr($configurationKey, \strlen(self::PLUGIN_CONFIG_PREFIX));
+
+        if (!\array_key_exists($shortKey, self::CONFIG_DEFAULTS)) {
+            return false;
+        }
+
+        $existingRaw = $existingRow['configurationValue'] ?? null;
+        $candidateRaw = $candidateRow['configurationValue'] ?? null;
+
+        if (!\is_string($existingRaw) || !\is_string($candidateRaw)) {
+            return false;
+        }
+
+        $existingValue = $this->decodeSystemConfigValue($existingRaw);
+        $candidateValue = $this->decodeSystemConfigValue($candidateRaw);
+        $defaultValue = self::CONFIG_DEFAULTS[$shortKey];
+
+        return $candidateValue === $defaultValue && $existingValue !== $defaultValue;
+    }
+
+    private function snapshotCaptchaState(string $source, bool $force): void
     {
         $state = $this->readLifecycleState();
         $captchaStateByScope = \is_array($state['captchaStateByScope'] ?? null) ? $state['captchaStateByScope'] : [];
         $foundSimpleTurnstile = false;
         $wasActiveSomewhere = false;
+        $now = $this->now();
 
         foreach ($this->fetchActiveCaptchaRows() as $row) {
             $scopeKey = $this->getScopeKeyFromRow($row);
             $activeCaptchas = $this->decodeActiveCaptchasFromRow($row);
 
-            if (!\is_array($activeCaptchas) || !array_key_exists(SimpleTurnstileCaptcha::CAPTCHA_NAME, $activeCaptchas)) {
+            if (!\is_array($activeCaptchas) || !\array_key_exists(SimpleTurnstileCaptcha::CAPTCHA_NAME, $activeCaptchas)) {
                 continue;
             }
 
@@ -311,7 +402,8 @@ class CaptchaConfigurationInstaller
 
             $captchaStateByScope[$scopeKey] = [
                 'wasActive' => $wasActive,
-                'capturedAt' => $this->now(),
+                'capturedAt' => $now,
+                'source' => $source,
             ];
 
             if ($wasActive) {
@@ -319,10 +411,19 @@ class CaptchaConfigurationInstaller
             }
         }
 
-        if (!$foundSimpleTurnstile && $captchaStateByScope !== []) {
-            // Do not overwrite a previously captured "true" state after the captcha was already removed.
-            $state['lastCaptchaSnapshotSkippedAt'] = $this->now();
+        if (!$foundSimpleTurnstile && !$force && $captchaStateByScope !== []) {
+            $state['lastCaptchaSnapshotSkippedAt'] = $now;
             $state['lastCaptchaSnapshotSkippedReason'] = 'simple-turnstile-not-present';
+            $state['lastCaptchaSnapshotSource'] = $source;
+            $this->writeLifecycleState($state);
+
+            return;
+        }
+
+        if (!$foundSimpleTurnstile && $force && $captchaStateByScope !== []) {
+            $state['lastCaptchaSnapshotSkippedAt'] = $now;
+            $state['lastCaptchaSnapshotSkippedReason'] = 'simple-turnstile-not-present-preserved-existing-state';
+            $state['lastCaptchaSnapshotSource'] = $source;
             $this->writeLifecycleState($state);
 
             return;
@@ -330,7 +431,8 @@ class CaptchaConfigurationInstaller
 
         $state['captchaWasActive'] = $wasActiveSomewhere;
         $state['captchaStateByScope'] = $captchaStateByScope;
-        $state['captchaStateUpdatedAt'] = $this->now();
+        $state['captchaStateUpdatedAt'] = $now;
+        $state['lastCaptchaSnapshotSource'] = $source;
         unset($state['lastCaptchaSnapshotSkippedReason']);
 
         $this->writeLifecycleState($state);
@@ -408,13 +510,13 @@ class CaptchaConfigurationInstaller
         if (\is_array($captchaStateByScope)) {
             $scopeState = $captchaStateByScope[$scopeKey] ?? null;
 
-            if (\is_array($scopeState) && array_key_exists('wasActive', $scopeState)) {
+            if (\is_array($scopeState) && \array_key_exists('wasActive', $scopeState)) {
                 return $scopeState['wasActive'] === true;
             }
 
             $globalState = $captchaStateByScope[self::GLOBAL_SCOPE_KEY] ?? null;
 
-            if (\is_array($globalState) && array_key_exists('wasActive', $globalState)) {
+            if (\is_array($globalState) && \array_key_exists('wasActive', $globalState)) {
                 return $globalState['wasActive'] === true;
             }
         }
@@ -442,7 +544,7 @@ class CaptchaConfigurationInstaller
         foreach ($this->fetchActiveCaptchaRows() as $row) {
             $activeCaptchas = $this->decodeActiveCaptchasFromRow($row);
 
-            if (!\is_array($activeCaptchas) || !array_key_exists(SimpleTurnstileCaptcha::CAPTCHA_NAME, $activeCaptchas)) {
+            if (!\is_array($activeCaptchas) || !\array_key_exists(SimpleTurnstileCaptcha::CAPTCHA_NAME, $activeCaptchas)) {
                 continue;
             }
 
@@ -655,6 +757,40 @@ class CaptchaConfigurationInstaller
         );
     }
 
+    private function registerRestoreFinalizer(bool $restoreActive, string $source): void
+    {
+        $connection = $this->connection;
+        $systemConfigService = $this->systemConfigService;
+
+        register_shutdown_function(static function () use ($connection, $systemConfigService, $restoreActive, $source): void {
+            try {
+                $installer = new self($systemConfigService, $connection);
+                $installer->recordLifecycleAction($source . '.start');
+                $installer->restoreUserConfigSnapshot();
+                $installer->ensureCaptchaRegistered($restoreActive);
+                $installer->synchronizeCurrentState($source . '.end', $restoreActive);
+            } catch (\Throwable) {
+            }
+        });
+    }
+
+    private function registerRestoreConfigAndRemoveCaptchaFinalizer(string $source): void
+    {
+        $connection = $this->connection;
+        $systemConfigService = $this->systemConfigService;
+
+        register_shutdown_function(static function () use ($connection, $systemConfigService, $source): void {
+            try {
+                $installer = new self($systemConfigService, $connection);
+                $installer->recordLifecycleAction($source . '.start');
+                $installer->restoreUserConfigSnapshot();
+                $installer->removeCaptchaFromAllActiveCaptchaConfigs();
+                $installer->recordLifecycleAction($source . '.end');
+            } catch (\Throwable) {
+            }
+        });
+    }
+
     private function decodeSystemConfigValue(string $configurationValue): mixed
     {
         try {
@@ -663,7 +799,7 @@ class CaptchaConfigurationInstaller
             return null;
         }
 
-        if (\is_array($decoded) && array_key_exists('_value', $decoded)) {
+        if (\is_array($decoded) && \array_key_exists('_value', $decoded)) {
             return $decoded['_value'];
         }
 
@@ -682,11 +818,11 @@ class CaptchaConfigurationInstaller
 
     private function isManagedPluginConfigKey(mixed $configurationKey): bool
     {
-        if (!\is_string($configurationKey) || !str_starts_with($configurationKey, self::PLUGIN_CONFIG_PREFIX)) {
+        if (!\is_string($configurationKey) || !\str_starts_with($configurationKey, self::PLUGIN_CONFIG_PREFIX)) {
             return false;
         }
 
-        $shortKey = substr($configurationKey, \strlen(self::PLUGIN_CONFIG_PREFIX));
+        $shortKey = \substr($configurationKey, \strlen(self::PLUGIN_CONFIG_PREFIX));
 
         return \in_array($shortKey, self::CONFIG_KEYS, true);
     }
@@ -718,7 +854,7 @@ class CaptchaConfigurationInstaller
             return null;
         }
 
-        $value = strtolower(trim($value));
+        $value = \strtolower(\trim($value));
 
         if ($value === '' || !$this->isUuidHex($value)) {
             return null;
@@ -729,12 +865,17 @@ class CaptchaConfigurationInstaller
 
     private function isUuidHex(string $value): bool
     {
-        return preg_match('/^[0-9a-f]{32}$/', strtolower($value)) === 1;
+        return \preg_match('/^[0-9a-f]{32}$/', \strtolower($value)) === 1;
     }
 
     private function now(): string
     {
         return (new \DateTimeImmutable())->format(\DATE_ATOM);
+    }
+
+    private function hashRows(array $rows): string
+    {
+        return \hash('sha256', json_encode($rows, \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES));
     }
 
     private function getDefaultCaptchaStructure(): array

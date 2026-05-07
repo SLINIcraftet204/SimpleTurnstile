@@ -11,5 +11,9 @@
             <argument key="$client" type="service" id="shopware.captcha.client"/>
             <tag name="shopware.storefront.captcha"/>
         </service>
+
+        <service id="SLINIcraftet204\SimpleTurnstile\Subscriber\ConfigSnapshotSubscriber">
+            <tag name="kernel.event_subscriber"/>
+        </service>
     </services>
 </container>

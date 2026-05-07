@@ -12,8 +12,33 @@
              data-size="{{ size }}"
              data-language="{{ language }}"
              data-response-field-name="cf-turnstile-response">
-            <div class="simple-turnstile-widget"
-                 data-simple-turnstile-widget="true"></div>
+            <div class="cf-turnstile simple-turnstile-widget"
+                 data-simple-turnstile-widget="true"
+                 data-sitekey="{{ siteKey }}"
+                 data-theme="{{ theme }}"
+                 data-size="{{ size }}"
+                 data-language="{{ language }}"
+                 data-response-field="true"
+                 data-response-field-name="cf-turnstile-response"
+                 data-refresh-expired="auto"></div>
         </div>
+
+        <script>
+            window.SimpleTurnstileBootstrap = window.SimpleTurnstileBootstrap || function () {
+                if (document.getElementById('simple-turnstile-api-script')) {
+                    return;
+                }
+
+                var script = document.createElement('script');
+                script.id = 'simple-turnstile-api-script';
+                script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+                script.async = true;
+                script.defer = true;
+
+                document.head.appendChild(script);
+            };
+
+            window.SimpleTurnstileBootstrap();
+        </script>
     {% endif %}
 {% endblock %}
