@@ -1,11 +1,4 @@
 {
-  "sw-settings-basic-information": {
-    "captcha": {
-      "label": {
-        "simpleTurnstile": "Simple Turnstile"
-      }
-    }
-  },
   "simple-turnstile": {
     "general": {
       "title": "Simple Turnstile",
