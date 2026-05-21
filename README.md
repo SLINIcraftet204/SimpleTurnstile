@@ -28,6 +28,74 @@ It integrates into Shopware's native storefront captcha system, can be selected 
 
 ---
 
+## Roadmap
+
+Simple Turnstile is intended to stay lightweight, free, and focused on a clean Cloudflare Turnstile integration for Shopware 6. The roadmap below shows the current direction of the project and may change depending on Shopware compatibility requirements, user feedback, and long-term maintainability.
+
+### 0.1.x - Foundation and stability
+
+Current focus:
+
+- Stable Cloudflare Turnstile integration for Shopware storefront captcha handling
+- Reliable lifecycle handling for deactivate, uninstall, reinstall, and retained user data
+- Configuration backup through `simple_turnstile_lifecycle_state`
+- Storefront widget rendering fallback for reliable Turnstile display
+- English and German snippets
+- Public documentation, contribution guidelines, and issue templates
+
+### 0.2.x - Administration and usability polish
+
+Planned improvements:
+
+- Reliable settings entry under **Settings > Extensions > Simple Turnstile**
+- Better administration snippets and descriptions
+- Clearer configuration hints for Site Key, Secret Key, domain setup, and debug mode
+- Improved validation messages for common setup mistakes
+- Release packaging cleanup for the Shopware Store
+
+### 0.3.x - Diagnostics and health checks
+
+Planned improvements:
+
+- Administration health check page
+- Checks for configured Site Key and Secret Key
+- Check whether Simple Turnstile is selected as the active Shopware captcha method
+- Check whether the lifecycle backup table exists and contains a current snapshot
+- Display the last known validation status without exposing secrets or full response tokens
+- Human-readable explanations for common Cloudflare validation errors
+
+### 0.4.x - Advanced Turnstile options
+
+Planned improvements:
+
+- Additional Turnstile widget modes where technically safe and useful
+- More flexible widget appearance and rendering options
+- Optional hostname validation
+- Optional action validation for protected forms
+- Better support for different storefront layouts and custom themes
+
+### 0.5.x - Form protection manager
+
+Planned improvements:
+
+- More granular control over which storefront forms should be protected
+- Optional per-form actions for better validation context
+- Better handling for newsletter, contact, registration, login, password reset, and review forms
+- Extensible structure for custom forms in individual storefront projects
+
+### Future ideas
+
+Ideas under evaluation:
+
+- Optional Turnstile protection for the Shopware Administration login
+- Protection only after failed login attempts
+- IP allowlist or emergency bypass for administration access
+- Additional developer hooks/events for custom validation flows
+
+Administration login protection is intentionally not part of the initial roadmap because it must be implemented very carefully to avoid locking shop owners out of their own administration.
+
+---
+
 ## Compatibility
 
 | Requirement | Version |
