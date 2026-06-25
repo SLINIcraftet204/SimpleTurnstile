@@ -106,6 +106,8 @@ Administration login protection is intentionally not part of the initial roadmap
 
 The plugin is currently targeted at Shopware **6.7.x**.
 
+Tested in Shopware from Version 6.7.9.1 to 6.7.11.1.
+
 ---
 
 ## Installation
